@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: previews
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - list:
+        elements:
+          - prNumber: "42"
+          - prNumber: "99"
+          - prNumber: "123"
+  template:
+    metadata:
+      name: 'preview-pr-{{.prNumber}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/SihanUdayaratna03/launchpad-config
+        targetRevision: HEAD
+        path: charts/preview
+        helm:
+          parameters:
+            - name: prNumber
+              value: '{{.prNumber}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'preview-pr-{{.prNumber}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
