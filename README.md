@@ -168,9 +168,9 @@ This is built in stages. Current state is honest, not aspirational.
 | Stage | Status |
 |---|---|
 | Local cluster, Argo CD, working GitOps sync loop | Done |
-| Helm chart with per-environment values | In progress |
+| Helm chart with per-environment values | Done |
 | Controller: webhook, namespace lifecycle, quotas | Planned |
-| ApplicationSet wiring, dynamic preview routing | Planned |
+| ApplicationSet wiring, ResourceQuota enforcement | Done |
 | Reaper + PR comment bot | Planned |
 | CI pipeline: test, Trivy scan, build, tag bump | Planned |
 | Terraform + k3s on EC2 | Planned |
