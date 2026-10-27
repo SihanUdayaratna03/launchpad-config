@@ -1,0 +1,13 @@
+image:
+  repository: sihanudayaratna/launchpad-controller
+  tag: latest
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
