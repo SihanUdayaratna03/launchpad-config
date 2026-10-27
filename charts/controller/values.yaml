@@ -1,6 +1,7 @@
 image:
   repository: sihanudayaratna/launchpad-controller
   tag: latest
+  pullPolicy: IfNotPresent
 
 replicaCount: 1
 

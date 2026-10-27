@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: launchpad-controller
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/SihanUdayaratna03/launchpad-config
+    targetRevision: HEAD
+    path: charts/controller
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
