@@ -17,6 +17,12 @@ spec:
         - name: controller
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: launchpad-webhook
+                  key: secret
           ports:
             - containerPort: 8090
           livenessProbe:
