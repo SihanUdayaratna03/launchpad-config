@@ -17,4 +17,4 @@ reaper:
   schedule: "0 * * * *"
   ttl: 72h
   dryRun: true
-  githubRepo: ""
+  githubRepo: "SihanUdayaratna03/launchpad"
