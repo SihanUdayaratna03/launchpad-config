@@ -12,3 +12,9 @@ resources:
   limits:
     cpu: 200m
     memory: 128Mi
+
+reaper:
+  schedule: "0 * * * *"
+  ttl: 72h
+  dryRun: true
+  githubRepo: ""

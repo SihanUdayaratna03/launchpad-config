@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: launchpad-reaper
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: launchpad-reaper
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: launchpad-reaper
+subjects:
+  - kind: ServiceAccount
+    name: launchpad-reaper
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: launchpad-reaper
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: launchpad-reaper
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applicationsets"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: launchpad-reaper
+subjects:
+  - kind: ServiceAccount
+    name: launchpad-reaper
+roleRef:
+  kind: Role
+  name: launchpad-reaper
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: launchpad-reaper
+spec:
+  schedule: {{ .Values.reaper.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          serviceAccountName: launchpad-reaper
+          restartPolicy: OnFailure
+          containers:
+            - name: reaper
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command: ["/reaper"]
+              env:
+                - name: TTL
+                  value: {{ .Values.reaper.ttl | quote }}
+                - name: DRY_RUN
+                  value: {{ .Values.reaper.dryRun | quote }}
+                - name: GITHUB_REPO
+                  value: {{ .Values.reaper.githubRepo | quote }}
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 32Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
