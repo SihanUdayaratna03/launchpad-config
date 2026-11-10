@@ -7,10 +7,7 @@ spec:
   goTemplate: true
   generators:
     - list:
-        elements:
-          - prNumber: "42"
-          - prNumber: "99"
-          - prNumber: "123"
+        elements: []
   template:
     metadata:
       name: 'preview-pr-{{.prNumber}}'
