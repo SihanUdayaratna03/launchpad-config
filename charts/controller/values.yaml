@@ -1,6 +1,6 @@
 image:
   repository: sihanudayaratna/launchpad-controller
-  tag: ca4ed2d6d1913f327870dc06857000879f805585
+  tag: ab4e139cb395220e9cf968dc957560ca16fb13b4
   pullPolicy: IfNotPresent
 
 replicaCount: 1
