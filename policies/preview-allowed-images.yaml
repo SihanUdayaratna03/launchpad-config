@@ -1,0 +1,25 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: preview-allowed-images
+  annotations:
+    description: "Only approved images may run in preview namespaces."
+spec:
+  validationActions:
+    - Deny
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        launchpad.io/preview: "true"
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    - message: "Image must come from nginxinc/nginx-unprivileged or sihanudayaratna/*."
+      expression: >-
+        object.spec.containers.all(c,
+          c.image.startsWith('nginxinc/nginx-unprivileged:') ||
+          c.image.startsWith('sihanudayaratna/') ||
+          c.image.startsWith('docker.io/sihanudayaratna/'))
