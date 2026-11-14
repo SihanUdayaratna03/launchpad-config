@@ -7,7 +7,7 @@ DEMO_TAG=${DEMO_TAG:-5f61837fd9ae8827e680d40686ec4f4135067911}
 PROBE_IMG=nginxinc/nginx-unprivileged:1.27-alpine
 cd "$(dirname "$0")/.."
 
-for t in docker k3d kubectl helm; do
+for t in docker k3d kubectl helm curl; do
   command -v "$t" >/dev/null || { echo "missing: $t"; exit 1; }
 done
 
@@ -34,7 +34,7 @@ expect_denied() {
 }
 
 echo "== create k3d cluster"
-k3d cluster create $CLUSTER --wait
+k3d cluster create $CLUSTER -p "${LB_PORT:-8081}:80@loadbalancer" --wait
 
 echo "== install Kyverno 3.10.0"
 helm repo add kyverno https://kyverno.github.io/kyverno/ >/dev/null
@@ -49,7 +49,8 @@ kubectl apply -f policies/
 echo "== create labelled preview namespace and deploy the chart with image tag $DEMO_TAG"
 kubectl create namespace $NS
 kubectl label namespace $NS launchpad.io/preview=true
-helm template $NS charts/preview --set prNumber=1 --set image.tag=$DEMO_TAG -n $NS | kubectl apply -n $NS -f -
+HOST=pr-1.127-0-0-1.nip.io
+helm template $NS charts/preview --set prNumber=1 --set image.tag=$DEMO_TAG --set host=$HOST -n $NS | kubectl apply -n $NS -f -
 
 echo "== wait for policies to be enforced"
 for i in $(seq 1 30); do
@@ -93,6 +94,19 @@ if grep -q "Pull request" <<<"$PAGE"; then pass "traefik-labelled pod in kube-sy
 for want in "#1" "preview-pr-1" "5f61837" "72h"; do
   if grep -q "$want" <<<"$PAGE"; then pass "page contains $want"; else fail "page is missing $want"; fi
 done
+
+echo "== Ingress: the preview URL works through Traefik"
+OUT=""
+for i in $(seq 1 30); do
+  if OUT=$(curl -s --max-time 5 -H "Host: $HOST" "http://127.0.0.1:${LB_PORT:-8081}/") && grep -q "Pull request" <<<"$OUT"; then break; fi
+  sleep 3
+done
+if grep -q "Pull request" <<<"$OUT"; then pass "http://$HOST serves the demo page"; else fail "preview URL did not serve the page: $OUT"; fi
+if curl -s --max-time 5 -H "Host: pr-2.127-0-0-1.nip.io" -o /dev/null -w '%{http_code}' "http://127.0.0.1:${LB_PORT:-8081}/" | grep -q 404; then
+  pass "unknown host gets 404"; else fail "unknown host did not get 404"; fi
+
+echo "== chart without a host renders no Ingress"
+if helm template x charts/preview --set prNumber=1 --set image.tag=$DEMO_TAG | grep -q "kind: Ingress"; then fail "Ingress rendered without host"; else pass "no Ingress without host"; fi
 
 echo "== NetworkPolicy"
 client attacker curl
