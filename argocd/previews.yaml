@@ -21,6 +21,8 @@ spec:
           parameters:
             - name: prNumber
               value: '{{.prNumber}}'
+            - name: image.tag
+              value: '{{.sha}}'
       destination:
         server: https://kubernetes.default.svc
         namespace: 'preview-pr-{{.prNumber}}'

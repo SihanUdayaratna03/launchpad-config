@@ -1,14 +1,16 @@
 replicaCount: 1
 
 image:
-  repository: nginxinc/nginx-unprivileged
-  tag: 1.27-alpine
+  repository: sihanudayaratna/launchpad-demo
+  tag: ""
   pullPolicy: IfNotPresent
 
 containerPort: 8080
 
 service:
   port: 80
+
+ttl: 72h
 
 resources:
   requests:
