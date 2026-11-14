@@ -1,9 +1,11 @@
 replicaCount: 1
 
 image:
-  repository: nginx
+  repository: nginxinc/nginx-unprivileged
   tag: 1.27-alpine
   pullPolicy: IfNotPresent
+
+containerPort: 8080
 
 service:
   port: 80

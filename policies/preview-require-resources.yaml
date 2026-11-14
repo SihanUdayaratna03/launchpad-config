@@ -1,0 +1,25 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: preview-require-resources
+  annotations:
+    description: "Every container needs CPU and memory requests and limits."
+spec:
+  validationActions:
+    - Deny
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        launchpad.io/preview: "true"
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    - message: "Containers must set CPU and memory requests and limits."
+      expression: >-
+        object.spec.containers.all(c,
+          has(c.resources) && has(c.resources.limits) && has(c.resources.requests) &&
+          'cpu' in c.resources.limits && 'memory' in c.resources.limits &&
+          'cpu' in c.resources.requests && 'memory' in c.resources.requests)

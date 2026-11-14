@@ -1,0 +1,26 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: preview-disallow-privileged
+  annotations:
+    description: "No privileged containers or host namespaces in previews."
+spec:
+  validationActions:
+    - Deny
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        launchpad.io/preview: "true"
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    - message: "Privileged containers and host namespaces are not allowed."
+      expression: >-
+        (!has(object.spec.hostNetwork) || object.spec.hostNetwork == false) &&
+        (!has(object.spec.hostPID) || object.spec.hostPID == false) &&
+        (!has(object.spec.hostIPC) || object.spec.hostIPC == false) &&
+        object.spec.containers.all(c,
+          !has(c.securityContext) || !has(c.securityContext.privileged) || c.securityContext.privileged == false)
