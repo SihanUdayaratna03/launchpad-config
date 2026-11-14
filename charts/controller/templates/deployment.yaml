@@ -23,6 +23,18 @@ spec:
                 secretKeyRef:
                   name: launchpad-webhook
                   key: secret
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: launchpad-github
+                  key: token
+                  optional: true
+            - name: BASE_DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: launchpad-env
+                  key: base-domain
+                  optional: true
           ports:
             - containerPort: 8090
           livenessProbe:
