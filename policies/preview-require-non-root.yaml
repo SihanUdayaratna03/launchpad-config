@@ -1,0 +1,25 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: preview-require-non-root
+  annotations:
+    description: "Containers in preview namespaces must not run as root."
+spec:
+  validationActions:
+    - Deny
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        launchpad.io/preview: "true"
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    - message: "Containers must set runAsNonRoot: true and allowPrivilegeEscalation: false."
+      expression: >-
+        object.spec.containers.all(c,
+          has(c.securityContext) &&
+          has(c.securityContext.runAsNonRoot) && c.securityContext.runAsNonRoot == true &&
+          has(c.securityContext.allowPrivilegeEscalation) && c.securityContext.allowPrivilegeEscalation == false)
