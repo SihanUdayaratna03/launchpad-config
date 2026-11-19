@@ -1,0 +1,76 @@
+alertmanager:
+  enabled: false
+
+prometheus-pushgateway:
+  enabled: false
+
+prometheus-node-exporter:
+  enabled: false
+
+kube-state-metrics:
+  enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 96Mi
+
+server:
+  retention: 6h
+  global:
+    scrape_interval: 30s
+    evaluation_interval: 30s
+  persistentVolume:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 200Mi
+    limits:
+      memory: 512Mi
+
+serverFiles:
+  alerting_rules.yml:
+    groups:
+      - name: launchpad
+        rules:
+          - alert: LaunchpadControllerDown
+            expr: absent(up{app="launchpad-controller"} == 1)
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: The Launchpad controller is not being scraped, so PR webhooks may be failing.
+          - alert: LaunchpadWebhookErrors
+            expr: increase(launchpad_webhook_requests_total{result="error"}[10m]) > 0
+            labels:
+              severity: warning
+            annotations:
+              summary: The controller failed to process a webhook in the last 10 minutes.
+          - alert: LaunchpadWebhookRejected
+            expr: increase(launchpad_webhook_requests_total{result="unauthorized"}[10m]) > 3
+            labels:
+              severity: warning
+            annotations:
+              summary: Several webhooks were rejected for a bad signature. Wrong secret or someone probing the endpoint.
+          - alert: LaunchpadCommentFailures
+            expr: increase(launchpad_comment_failures_total[10m]) > 0
+            labels:
+              severity: warning
+            annotations:
+              summary: The controller could not comment on a pull request. Check the GitHub token.
+          - alert: LaunchpadTooManyPreviews
+            expr: count(kube_namespace_created{namespace=~"preview-pr-.*"}) > 8
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: More than 8 preview environments are running. The node may run out of memory.
+          - alert: LaunchpadPreviewNotReady
+            expr: sum by (namespace) (kube_pod_status_ready{namespace=~"preview-pr-.*", condition="false"}) > 0
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: A preview pod has not been ready for 10 minutes. Often the image was not pushed yet.
