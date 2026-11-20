@@ -39,6 +39,18 @@ spec:
                   name: launchpad-env
                   key: base-domain
                   optional: true
+            - name: BACKEND
+              value: {{ .Values.backend | default "argocd" | quote }}
+            {{- if eq (.Values.backend | default "argocd") "openchoreo" }}
+            - name: OC_NAMESPACE
+              value: {{ .Values.openchoreo.namespace | quote }}
+            - name: OC_ENVIRONMENT
+              value: {{ .Values.openchoreo.environment | quote }}
+            - name: OC_IMAGE
+              value: {{ .Values.openchoreo.image | quote }}
+            - name: OC_HOST
+              value: {{ .Values.openchoreo.host | quote }}
+            {{- end }}
           ports:
             - containerPort: 8090
           livenessProbe:

@@ -2,6 +2,10 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: launchpad-reaper
+{{- if eq (.Values.backend | default "argocd") "argocd" }}
+# Deleting preview namespaces and editing the ApplicationSet is how the reaper
+# works in the Argo CD mode. In the OpenChoreo mode it deletes Projects instead,
+# so it is not given either of these; see rbac-openchoreo.yaml.
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -45,6 +49,7 @@ roleRef:
   kind: Role
   name: launchpad-reaper
   apiGroup: rbac.authorization.k8s.io
+{{- end }}
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -74,6 +79,12 @@ spec:
                   value: {{ .Values.reaper.dryRun | quote }}
                 - name: GITHUB_REPO
                   value: {{ .Values.reaper.githubRepo | quote }}
+                - name: BACKEND
+                  value: {{ .Values.backend | default "argocd" | quote }}
+                {{- if eq (.Values.backend | default "argocd") "openchoreo" }}
+                - name: OC_NAMESPACE
+                  value: {{ .Values.openchoreo.namespace | quote }}
+                {{- end }}
               resources:
                 requests:
                   cpu: 20m
