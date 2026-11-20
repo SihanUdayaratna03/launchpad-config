@@ -1,188 +1,112 @@
-# Launchpad
+# Mini Hackathon Chat Widget — Frontend-Only (No Backend)
 
-**Every pull request gets its own live environment.**
+A chatbot that answers Rules & Regulations questions entirely in the browser.
+No server, no API key, no vector database, no LLM calls, no monthly bill.
 
-Open a PR, and within a minute a bot comments a URL. Click it, and you're looking at
-that branch running on Kubernetes — real cluster, real ingress, real database.
-Close the PR, and everything it created disappears.
+## Files
 
-This is the Kubernetes equivalent of what Vercel and Netlify do for static sites, and
-what Heroku Review Apps did before them. It exists because code review by reading a
-diff is guesswork; code review by clicking the thing is not.
-
----
-
-## The problem
-
-A reviewer who wants to actually run a branch has to pull it, install dependencies,
-run migrations, resolve a port conflict, and lose thirty minutes. Most don't. They
-read the diff, write "LGTM", and merge.
-
-Launchpad removes that cost entirely.
-
----
+| File | Purpose |
+|---|---|
+| `rules-data.json` | The knowledge base — 21 Q&A entries extracted from the Rules & Regulations doc |
+| `chatbot-widget.js` | Loads the JSON, matches questions, renders the chat UI |
+| `chatbot-widget.css` | Styling for the floating widget |
+| `demo.html` | Example page showing the widget embedded |
 
 ## How it works
 
-```mermaid
-flowchart TD
-    A[Pull request opened] --> B[Webhook to controller]
-    B --> C[Create namespace + ResourceQuota]
-    B --> D[Write ApplicationSet entry to config repo]
-    D --> E[Argo CD detects drift]
-    E --> F[Sync to preview namespace]
-    F --> G[Bot comments live URL on PR]
-    H[Reaper CronJob - hourly] --> I{PR closed or TTL expired?}
-    I -->|yes| J[Destroy namespace]
-    I -->|no| K[Leave running]
+1. The script tag's `data-rules` attribute tells it where the JSON file lives.
+2. On page load, it `fetch()`es that JSON once and keeps it in memory.
+3. When someone types a question, it strips stopwords, tokenizes both the
+   question and every FAQ entry's `question` + `keywords`, and scores each
+   entry by token overlap (exact match = 3 points, partial/substring match =
+   1 point — this gives typo tolerance without needing a real spellchecker).
+4. The highest-scoring entry above a confidence threshold (3) is shown as
+   the answer. Below that, it shows a fallback message with suggested topics.
+
+No network request happens after the initial JSON fetch — every subsequent
+question is answered instantly, client-side.
+
+## Step-by-step: adding it to your site
+
+### 1. Copy the files
+Drop `chatbot-widget.js`, `chatbot-widget.css`, and `rules-data.json` into
+your website's root folder (or an `/assets` folder — just keep the relative
+path in mind for step 2).
+
+### 2. Add two lines before `</body>` on every page you want the chatbot on
+```html
+<link rel="stylesheet" href="chatbot-widget.css">
+<script src="chatbot-widget.js" data-rules="rules-data.json"></script>
 ```
+If your files live in a subfolder, adjust the paths, e.g.
+`data-rules="/assets/rules-data.json"`.
 
-Nothing in this flow runs `kubectl apply`. The controller writes to Git; Argo CD
-reconciles the cluster against Git. That separation is the whole point.
-
----
-
-## Architecture
-
-### `launchpad-controller` — Go
-
-Receives GitHub webhooks and manages environment lifecycle through `client-go`.
-
-- Validates the webhook HMAC signature before doing anything
-- Creates `preview-pr-<n>` namespace with a `ResourceQuota` (1 CPU, 1Gi memory)
-  and a `LimitRange` so one noisy PR cannot starve the cluster
-- Commits an `ApplicationSet` entry to the config repo
-- Tears all of it down on `closed` and `merged` events
-
-Go because `client-go` is the native Kubernetes SDK, and because a controller that
-holds watch connections should not be fighting a GIL.
-
-### `launchpad-reaper` — Python
-
-A CronJob that runs hourly and answers one question: should this environment still
-exist?
-
-- Destroys environments older than their TTL (default 72h)
-- Destroys environments whose PR has closed but whose teardown was missed
-- Warns on the PR when an environment has had no traffic for 24h
-- Exposes `/metrics` for Prometheus
-
-Python because this is glue, scheduling, and GitHub API work — the things Python is
-good at.
-
-### `launchpad-config` — the GitOps repository
-
-Helm chart, per-environment values, `ApplicationSet` definitions. The single source
-of truth for cluster state.
-
----
-
-## Design decisions
-
-**Two repositories, not one.**
-Application source lives in `launchpad`; deployment state lives in `launchpad-config`.
-An application commit is not a deployment. Keeping them apart means cluster history
-stays readable, and CI never needs cluster credentials — Argo CD pulls, CI does not push.
-
-**Immutable image tags.**
-Workloads are pinned to a commit SHA, never `:latest`. A pod that restarts three weeks
-later pulls exactly the code that was deployed, not whatever happens to be tagged latest.
-
-**Cleanup is a first-class feature.**
-Creating environments is the easy half. Preview systems fail at reclaiming them —
-someone opens a PR, goes on leave, and an environment runs for a month. Every
-environment therefore carries a TTL, a `ResourceQuota`, and an automatic reaper.
-
-**Least-privilege RBAC.**
-The controller runs under a `ServiceAccount` scoped to namespace lifecycle operations.
-Not `cluster-admin`. A compromised webhook handler should not be able to read every
-secret in the cluster.
-
-**Preview environments are isolated, not production clones.**
-Each gets its own ephemeral Postgres with seed data. No shared database, no production
-credentials, no sandbox keys that are quietly real.
-
----
-
-## Stack
-
-| Layer | Tool |
-|---|---|
-| Orchestration | Kubernetes (kind locally, k3s on EC2) |
-| GitOps | Argo CD + ApplicationSet |
-| Packaging | Helm |
-| Containers | Docker, multi-stage, distroless base |
-| Registry | Docker Hub |
-| CI | GitHub Actions |
-| Infrastructure | Terraform |
-| Observability | Prometheus + Grafana |
-| Services | Go, Python |
-
----
-
-## Repository layout
-
-    launchpad/
-      controller/          # Go — webhook receiver, namespace lifecycle
-      reaper/              # Python — TTL enforcement, PR bot
-      .github/workflows/   # CI: test, build, scan, push, bump
-      terraform/           # EC2 + k3s provisioning
-
-    launchpad-config/      # separate repo
-      charts/preview/      # Helm chart for a preview environment
-      applicationsets/     # Argo CD ApplicationSet definitions
-      apps/                # Long-lived applications
-
----
-
-## Local setup
-
-Requires Docker, kind, kubectl, and Helm.
-
+### 3. Test locally
+Browsers block `fetch()` on `file://` pages, so serve the folder over HTTP
+while developing:
 ```bash
-# 1. Cluster
-kind create cluster --name launchpad
-
-# 2. Argo CD
-kubectl create namespace argocd
-kubectl apply -n argocd -f \
-  https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-kubectl -n argocd rollout status deploy/argocd-server
-
-# 3. Admin password
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d
-
-# 4. UI
-kubectl -n argocd port-forward svc/argocd-server 8080:443
+python3 -m http.server 8000
 ```
+Then open `http://localhost:8000/demo.html` (or your real page) and click
+the chat bubble, bottom-right.
 
-Argo CD is then at `https://localhost:8080`, username `admin`.
+### 4. Update the knowledge base whenever rules change
+Open `rules-data.json` and edit/add entries — no code changes needed. Each
+entry looks like:
+```json
+{
+  "id": "unique_id",
+  "question": "A natural way someone might ask this",
+  "keywords": ["a few", "extra trigger words", "synonyms"],
+  "answer": "The answer text shown in the chat."
+}
+```
+More `keywords` = better matching. Include the words people would actually
+type, not just formal document language.
 
----
+### 5. Deploy — free static hosting options
 
-## Status
+**Option A — GitHub Pages (recommended if the registration site is already
+on GitHub)**
+1. Push these files to a GitHub repo.
+2. Repo → Settings → Pages → Source: select your branch (e.g. `main`) and
+   root folder.
+3. Your site is live at `https://<username>.github.io/<repo>/` within a
+   couple of minutes.
 
-This is built in stages. Current state is honest, not aspirational.
+**Option B — Netlify**
+1. Go to [app.netlify.com/drop](https://app.netlify.com/drop).
+2. Drag the whole project folder onto the page.
+3. Netlify gives you a live URL immediately — no account required to try it,
+   free account to keep it permanently.
 
-| Stage | Status |
-|---|---|
-| Local cluster, Argo CD, working GitOps sync loop | Done |
-| Helm chart with per-environment values | Done |
-| Controller: webhook, namespace lifecycle, quotas | Planned |
-| ApplicationSet wiring, ResourceQuota enforcement | Done |
-| Reaper + PR comment bot | Planned |
-| CI pipeline: test, Trivy scan, build, tag bump | Planned |
-| Terraform + k3s on EC2 | Planned |
-| Prometheus, Grafana, alerting | Planned |
+**Option C — Vercel**
+1. `npm i -g vercel` (one-time), then run `vercel` inside the project folder.
+2. Follow the prompts — free tier, live URL in under a minute.
 
----
+**Option D — It's already part of an existing site**
+If the registration page is already hosted somewhere (WordPress, custom
+server, etc.), you don't need a separate deploy at all — just upload the
+three widget files alongside your existing site files and add the two
+`<link>`/`<script>` lines from step 2.
 
-## What this project is really about
+### 6. (Optional) Tune the matching sensitivity
+In `chatbot-widget.js`, the line
+```js
+var THRESHOLD = 3;
+```
+controls how confident the widget must be before answering. Lower it (e.g.
+`2`) to answer more often but risk occasional wrong matches; raise it (e.g.
+`4`) to be stricter and fall back to "I'm not sure" more often.
 
-The application deployed into a preview environment is deliberately trivial. It is a
-prop. The work is everything around it: the reconciliation loop, the isolation
-boundaries, the quota enforcement, the teardown guarantees, the pipeline that gets a
-commit from a laptop into a cluster without a human running a single command.
+## Known limitations (same as any keyword-based system)
 
-Building things is easy. Making sure they go away is engineering.
+- No real language understanding — heavily rephrased or very vague questions
+  may miss (this is exactly why Approaches 1 and 2 in the main proposal use
+  an LLM instead).
+- Every new type of question needs its own entry in `rules-data.json`.
+- Can't combine info across multiple sections into one answer the way an
+  LLM can — each answer is a single stored entry.
+
+These are acceptable trade-offs for a $0, zero-maintenance FAQ widget, and
+the JSON file itself can be reused as-is if you upgrade to Approach 2 later.
