@@ -13,6 +13,17 @@ resources:
     cpu: 200m
     memory: 128Mi
 
+# Which deployment engine the controller and the reaper talk to:
+# argocd (the default, and what the AWS install uses) or openchoreo.
+backend: argocd
+
+# Only read when backend is openchoreo.
+openchoreo:
+  namespace: default
+  environment: development
+  image: sihanudayaratna/launchpad-demo
+  host: development-default.openchoreoapis.localhost:19080
+
 reaper:
   schedule: "*/10 * * * *"
   ttl: 72h

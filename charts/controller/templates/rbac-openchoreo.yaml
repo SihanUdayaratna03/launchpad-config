@@ -1,0 +1,54 @@
+{{- if eq (.Values.backend | default "argocd") "openchoreo" }}
+# Only rendered when backend=openchoreo. The controller may create and delete the
+# objects that make up a preview, in the OpenChoreo namespace, and nothing else:
+# no list/watch, no cluster-wide access, no secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: launchpad-controller-openchoreo
+  namespace: {{ .Values.openchoreo.namespace }}
+rules:
+  - apiGroups: ["openchoreo.dev"]
+    resources: ["projects", "projectreleasebindings", "components", "workloads"]
+    verbs: ["get", "create", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: launchpad-controller-openchoreo
+  namespace: {{ .Values.openchoreo.namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: launchpad-controller
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: launchpad-controller-openchoreo
+---
+# The reaper sweeps Projects, so it needs to see them all. It never creates or
+# edits one, and it has no access to the other OpenChoreo kinds.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: launchpad-reaper-openchoreo
+  namespace: {{ .Values.openchoreo.namespace }}
+rules:
+  - apiGroups: ["openchoreo.dev"]
+    resources: ["projects"]
+    verbs: ["list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: launchpad-reaper-openchoreo
+  namespace: {{ .Values.openchoreo.namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: launchpad-reaper
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: launchpad-reaper-openchoreo
+{{- end }}
