@@ -1,5 +1,63 @@
 alertmanager:
-  enabled: false
+  enabled: true
+
+  # One node, and alerts that are useful for minutes rather than months.
+  persistence:
+    enabled: false
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+
+  # The Discord webhook URL is a credential, so it is not in this repository.
+  # Create it once per cluster:
+  #
+  #   kubectl -n monitoring create secret generic alertmanager-discord \
+  #     --from-literal=webhook-url='https://discord.com/api/webhooks/...'
+  #
+  # Alertmanager reads the file rather than the value, so the URL never appears
+  # in the config it serves on its own API.
+  extraSecretMounts:
+    - name: discord
+      mountPath: /etc/alertmanager-secrets
+      subPath: ""
+      secretName: alertmanager-discord
+      readOnly: true
+
+  config:
+    route:
+      receiver: discord
+      # One message per alert, not one per firing instance.
+      group_by: [alertname, severity]
+      group_wait: 30s
+      group_interval: 5m
+      # A still-firing alert is repeated this often, so a known problem does not
+      # fill the channel.
+      repeat_interval: 4h
+      routes:
+        - matchers:
+            - severity="critical"
+          receiver: discord
+          group_wait: 10s
+          repeat_interval: 1h
+
+    receivers:
+      - name: discord
+        discord_configs:
+          - webhook_url_file: /etc/alertmanager-secrets/webhook-url
+            send_resolved: true
+
+    # While a preview pod is not ready, its namespace is usually also over quota
+    # or the controller is down; the louder alert is the one worth sending.
+    inhibit_rules:
+      - source_matchers:
+          - severity="critical"
+        target_matchers:
+          - severity="warning"
+        equal: [alertname]
 
 prometheus-pushgateway:
   enabled: false
