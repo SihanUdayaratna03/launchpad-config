@@ -159,7 +159,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum(increase(launchpad_webhook_requests_total{result=\"accepted\"}[$__range]))",
+              "expr": "round(sum(increase(launchpad_webhook_requests_total{result=\"accepted\"}[$__range])))",
               "instant": true
             }
           ],
