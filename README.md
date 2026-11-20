@@ -80,7 +80,40 @@ namespace called `preview-pr-<N>`:
 | `deployment.yaml` | The webhook controller, annotated for Prometheus scraping |
 | `ingress.yaml` | Publishes `/webhook` through Traefik (`/metrics` is not published) |
 | `rbac.yaml` | Separate ServiceAccounts for the controller and the reaper, each with only the verbs it needs |
+| `rbac-openchoreo.yaml` | The same, for the OpenChoreo backend. Rendered only when `backend: openchoreo` |
 | `reaper.yaml` | CronJob, every 10 minutes (`reaper.schedule` in `values.yaml`) |
+
+### Choosing a backend
+
+Launchpad's controller and reaper can drive either Argo CD or
+[OpenChoreo](https://github.com/SihanUdayaratna03/launchpad#running-on-openchoreo). `backend`
+in `values.yaml` picks which, and it changes what this chart renders:
+
+| `backend` | What it renders |
+|---|---|
+| `argocd` (default) | A Role letting the controller `get` and `patch` `applicationsets`, and the reaper's namespace permissions. This is what runs on AWS |
+| `openchoreo` | Those are left out, and `rbac-openchoreo.yaml` takes their place: the controller may `get`, `create`, `patch` and `delete` `projects`, `projectreleasebindings`, `components` and `workloads`; the reaper may only `list` and `delete` `projects` |
+
+Neither mode holds a permission it cannot use, so switching the backend takes the other
+one's access away rather than adding to it. The settings live under `openchoreo`:
+
+```yaml
+backend: openchoreo
+
+openchoreo:
+  namespace: default
+  environment: development
+  image: sihanudayaratna/launchpad-demo
+  host: development-default.openchoreoapis.localhost:19080
+```
+
+Both the Deployment and the reaper CronJob read them as environment variables. Rendered with
+the default values, the chart produces exactly what it produced before the switch existed:
+
+```bash
+helm template charts/controller                            # no OpenChoreo objects
+helm template charts/controller --set backend=openchoreo   # no Argo CD permissions
+```
 
 ## Policies
 
