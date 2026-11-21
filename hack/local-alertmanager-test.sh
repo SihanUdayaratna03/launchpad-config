@@ -51,8 +51,15 @@ wait_for() {
 
 alert_firing()   { curl -sf --max-time 5 localhost:9093/api/v2/alerts | grep -q LaunchpadControllerDown; }
 prom_sees_am()   { curl -sf --max-time 5 localhost:9090/api/v1/alertmanagers | grep -q '"activeAlertmanagers":\[{'; }
-# metric NAME: the counter's value, or 0 when Alertmanager has not published it yet.
-metric() { curl -sf --max-time 5 localhost:9093/metrics | awk -v n="$1" '$0 ~ "^"n"{" && /integration="discord"/ {v=$2} END {print v+0}'; }
+# metric NAME: the sum of that counter's Discord series, or "missing" when
+# Alertmanager has not published it at all. A counter that is simply absent must
+# not read as a zero, or a notification that was never attempted would look like
+# a notification that never failed.
+metric() {
+  curl -sf --max-time 5 localhost:9093/metrics |
+    awk -v n="$1" '$0 ~ "^"n"{" && /integration="discord"/ {v += $2; seen = 1}
+                   END {if (seen) print v; else print "missing"}'
+}
 
 echo "== creating cluster $CLUSTER"
 k3d cluster create "$CLUSTER" --wait >/dev/null
@@ -128,14 +135,19 @@ wait_for "$WAIT" alert_firing \
 
 if [ -n "${DISCORD_WEBHOOK:-}" ]; then
   echo "== delivery to Discord"
-  wait_for 120 test "$(metric alertmanager_notifications_total)" -gt 0 \
+
+  attempted() { local v; v=$(metric alertmanager_notifications_total); [ "$v" != "missing" ] && [ "${v%%.*}" -gt 0 ]; }
+  wait_for 120 attempted \
     && pass "Alertmanager sent a Discord notification" \
     || fail "Alertmanager never sent a Discord notification"
-  if [ "$(metric alertmanager_notifications_failed_total)" -eq 0 ]; then
-    pass "Discord accepted it (no failed notifications)"
-  else
-    fail "Discord rejected it: $(metric alertmanager_notifications_failed_total) failed notifications"
-  fi
+
+  FAILURES=$(metric alertmanager_notifications_failed_total)
+  case "$FAILURES" in
+    missing) fail "Alertmanager published no failure counter for Discord, so delivery cannot be confirmed" ;;
+    0|0.*)   pass "Discord accepted it (no failed notifications)" ;;
+    *)       fail "Discord rejected it: $FAILURES failed notifications. Is the webhook URL real?" ;;
+  esac
+
   echo "  (check the channel: a LaunchpadControllerDown message should be there)"
 else
   echo "  SKIP: delivery to Discord, DISCORD_WEBHOOK is not set"
