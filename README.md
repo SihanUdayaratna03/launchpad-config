@@ -55,6 +55,7 @@ flowchart LR
     hack/
       local-test.sh                  local test run
       local-monitoring-test.sh       local k3d check that Prometheus scrapes the controller
+      local-alertmanager-test.sh     local k3d check that an alert reaches Discord
 
 ---
 
@@ -132,7 +133,21 @@ Kyverno enforces these on preview namespaces:
 Prometheus scrapes the controller's `/metrics`. The alert rules (controller down,
 webhook errors, webhook rejections, comment failures, too many previews, preview not
 ready) are in `monitoring/prometheus-values.yaml`; the dashboard is
-`monitoring/dashboards/launchpad-dashboard.yaml`. Open Grafana with:
+`monitoring/dashboards/launchpad-dashboard.yaml`.
+
+Alertmanager is part of the same release and is configured in the same values file. It
+groups alerts by name and severity, repeats a still-firing one every four hours, lets a
+`critical` alert silence the `warning` of the same name, and sends what is left to a
+Discord channel. The webhook URL is mounted from a Secret and read with
+`webhook_url_file`, so it is neither in this repository nor in the ConfigMap Alertmanager
+renders.
+
+`hack/local-alertmanager-test.sh` proves the path end to end on a throwaway k3d cluster:
+it installs this release, waits for `LaunchpadControllerDown` to fire on its own, and
+checks that Alertmanager both received it and delivered it, by reading Alertmanager's
+`alertmanager_notifications_total{integration="discord"}` and its failure counter.
+
+Open Grafana with:
 
 ```bash
 kubectl -n monitoring port-forward svc/grafana 3000:80
@@ -153,5 +168,13 @@ request, merge, and Argo CD applies it.
 
 Secrets are not stored here. Two are created by hand in the `argocd` namespace on
 each cluster: `launchpad-webhook` (webhook HMAC secret) and `launchpad-github`
-(token used for PR comments and checking whether a PR is closed). See
+(token used for PR comments and checking whether a PR is closed). A third lives in
+`monitoring`, holding the Discord webhook Alertmanager posts to:
+
+```bash
+kubectl -n monitoring create secret generic alertmanager-discord \
+  --from-literal=webhook-url='https://discord.com/api/webhooks/...'
+```
+
+See
 [Run it on AWS](https://github.com/SihanUdayaratna03/launchpad#run-it-on-aws).
