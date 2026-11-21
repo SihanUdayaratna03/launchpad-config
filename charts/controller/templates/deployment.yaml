@@ -39,6 +39,12 @@ spec:
                   name: launchpad-env
                   key: base-domain
                   optional: true
+            - name: TLS_RESOLVER
+              valueFrom:
+                configMapKeyRef:
+                  name: launchpad-env
+                  key: tls-resolver
+                  optional: true
             - name: BACKEND
               value: {{ .Values.backend | default "argocd" | quote }}
             {{- if eq (.Values.backend | default "argocd") "openchoreo" }}

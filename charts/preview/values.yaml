@@ -23,3 +23,8 @@ resources:
 prNumber: ""
 
 host: ""
+
+# Name of the Traefik certificate resolver that obtains this preview's
+# certificate. Empty serves the preview over plain http, which is what an
+# install with no ACME set up gets.
+tlsResolver: ""

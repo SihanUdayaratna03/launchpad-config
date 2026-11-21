@@ -25,6 +25,8 @@ spec:
               value: '{{.sha}}'
             - name: host
               value: '{{.host}}'
+            - name: tlsResolver
+              value: '{{ default "" .tlsResolver }}'
       destination:
         server: https://kubernetes.default.svc
         namespace: 'preview-pr-{{.prNumber}}'
